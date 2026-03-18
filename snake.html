@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>贪吃蛇游戏</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #000000 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #fff;
+            overflow: hidden;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+            font-size: 2.5rem;
+            text-shadow: 0 0 30px rgba(0, 255, 255, 0.8);
+            letter-spacing: 4px;
+        }
+
+        .game-container {
+            position: relative;
+        }
+
+        #gameCanvas {
+            border: 2px solid rgba(0, 255, 255, 0.5);
+            border-radius: 8px;
+            box-shadow: 0 0 40px rgba(0, 255, 255, 0.3),
+                        0 0 80px rgba(0, 255, 255, 0.1),
+                        inset 0 0 60px rgba(0, 255, 255, 0.05);
+            background: #050505;
+        }
+
+        .score-board {
+            display: flex;
+            justify-content: space-between;
+            width: 400px;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+        }
+
+        .score {
+            padding: 10px 20px;
+            background: rgba(0, 255, 255, 0.1);
+            border-radius: 8px;
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+        }
+
+        .instructions {
+            margin-top: 20px;
+            text-align: center;
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .instructions kbd {
+            background: #222;
+            padding: 3px 8px;
+            border-radius: 4px;
+            border: 1px solid #444;
+            margin: 0 3px;
+        }
+
+        #startBtn {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 20px 50px;
+            font-size: 1.5rem;
+            background: linear-gradient(45deg, #00ffff, #00ff88);
+            color: #000;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.6),
+                        0 0 60px rgba(0, 255, 255, 0.3);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 30px rgba(0, 255, 255, 0.6), 0 0 60px rgba(0, 255, 255, 0.3); }
+            50% { box-shadow: 0 0 50px rgba(0, 255, 255, 0.8), 0 0 100px rgba(0, 255, 255, 0.5); }
+        }
+
+        #startBtn:hover {
+            transform: translate(-50%, -50%) scale(1.1);
+        }
+
+        .game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            display: none;
+        }
+
+        .game-over h2 {
+            font-size: 2.5rem;
+            color: #ff4444;
+            margin-bottom: 10px;
+            text-shadow: 0 0 20px rgba(255, 68, 68, 0.8);
+        }
+
+        .game-over button {
+            padding: 12px 35px;
+            font-size: 1.1rem;
+            background: linear-gradient(45deg, #00ffff, #00ff88);
+            color: #000;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 15px;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <h1>🐍 贪吃蛇</h1>
+    
+    <div class="score-board">
+        <div class="score">得分: <span id="score">0</span></div>
+        <div class="score">速度: <span id="level">1</span></div>
+    </div>
+    
+    <div class="game-container">
+        <canvas id="gameCanvas" width="400" height="400"></canvas>
+        <button id="startBtn">开始游戏</button>
+        <div class="game-over" id="gameOver">
+            <h2>💥 游戏结束</h2>
+            <p>最终得分: <span id="finalScore">0</span></p>
+            <button onclick="resetGame()">再来一局</button>
+        </div>
+    </div>
+    
+    <div class="instructions">
+        <p>使用 <kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> 或 <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 控制</p>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const levelEl = document.getElementById('level');
+        const startBtn = document.getElementById('startBtn');
+        const gameOverEl = document.getElementById('gameOver');
+        const finalScoreEl = document.getElementById('finalScore');
+
+        const GRID_SIZE = 20;
+        const GRID_COUNT = canvas.width / GRID_SIZE;
+
+        let snake = [];
+        let food = { x: 0, y: 0 };
+        let direction = { x: 0, y: 0 };
+        let nextDirection = { x: 0, y: 0 };
+        let score = 0;
+        let level = 1;
+        let gameLoop = null;
+        let isRunning = false;
+        
+        // 流光粒子系统
+        let particles = [];
+        let streamLines = [];
+        let hue = 180;
+
+        function initGame() {
+            snake = [
+                { x: 10, y: 10 },
+                { x: 9, y: 10 },
+                { x: 8, y: 10 }
+            ];
+            direction = { x: 1, y: 0 };
+            nextDirection = { x: 1, y: 0 };
+            score = 0;
+            level = 1;
+            scoreEl.textContent = score;
+            levelEl.textContent = level;
+            particles = [];
+            streamLines = [];
+            hue = 180;
+            spawnFood();
+            draw();
+        }
+
+        function spawnFood() {
+            let validPosition = false;
+            while (!validPosition) {
+                food.x = Math.floor(Math.random() * GRID_COUNT);
+                food.y = Math.floor(Math.random() * GRID_COUNT);
+                validPosition = !snake.some(segment => 
+                    segment.x === food.x && segment.y === food.y
+                );
+            }
+        }
+
+        // 创建流光粒子
+        function createStreamParticle(x, y) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 1 + Math.random() * 2;
+            
+            particles.push({
+                x: x * GRID_SIZE + GRID_SIZE / 2,
+                y: y * GRID_SIZE + GRID_SIZE / 2,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                life: 1,
+                decay: 0.015 + Math.random() * 0.01,
+                size: 3 + Math.random() * 4,
+                hue: hue
+            });
+        }
+
+        // 创建流光线
+        function createStreamLine(x, y, prevX, prevY) {
+            streamLines.push({
+                x: x * GRID_SIZE + GRID_SIZE / 2,
+                y: y * GRID_SIZE + GRID_SIZE / 2,
+                prevX: prevX * GRID_SIZE + GRID_SIZE / 2,
+                prevY: prevY * GRID_SIZE + GRID_SIZE / 2,
+                life: 1,
+                decay: 0.03,
+                width: 3,
+                hue: hue
+            });
+        }
+
+        // 更新粒子
+        function updateParticles() {
+            // 更新粒子
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vx *= 0.98;
+                p.vy *= 0.98;
+                p.life -= p.decay;
+                p.size *= 0.99;
+                
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+
+            // 更新流光线
+            for (let i = streamLines.length - 1; i >= 0; i--) {
+                const line = streamLines[i];
+                line.life -= line.decay;
+                line.width *= 0.97;
+                
+                if (line.life <= 0) {
+                    streamLines.splice(i, 1);
+                }
+            }
+
+            // 持续生成流光
+            if (isRunning && snake.length > 0) {
+                // 蛇头产生流光
+                createStreamParticle(snake[0].x, snake[0].y);
+                createStreamParticle(snake[0].x, snake[0].y);
+                
+                // 蛇身产生流光
+                for (let i = 1; i < snake.length; i += 2) {
+                    createStreamParticle(snake[i].x, snake[i].y);
+                }
+            }
+        }
+
+        // 绘制流光粒子
+        function drawParticles() {
+            // 绘制流光线（发光轨迹）
+            streamLines.forEach(line => {
+                const gradient = ctx.createLinearGradient(line.prevX, line.prevY, line.x, line.y);
+                gradient.addColorStop(0, `hsla(${line.hue}, 100%, 60%, 0)`);
+                gradient.addColorStop(0.5, `hsla(${line.hue}, 100%, 60%, ${line.life * 0.8})`);
+                gradient.addColorStop(1, `hsla(${line.hue}, 100%, 60%, 0)`);
+                
+                ctx.beginPath();
+                ctx.moveTo(line.prevX, line.prevY);
+                ctx.lineTo(line.x, line.y);
+                ctx.strokeStyle = gradient;
+                ctx.lineWidth = line.width;
+                ctx.lineCap = 'round';
+                ctx.stroke();
+
+                // 外发光
+                ctx.shadowColor = `hsl(${line.hue}, 100%, 60%)`;
+                ctx.shadowBlur = 15;
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+            });
+
+            // 绘制粒子
+            particles.forEach(p => {
+                // 核心
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fillStyle = `hsla(${p.hue}, 100%, 70%, ${p.life})`;
+                ctx.fill();
+
+                // 发光
+                const gradient = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size * 3);
+                gradient.addColorStop(0, `hsla(${p.hue}, 100%, 60%, ${p.life * 0.5})`);
+                gradient.addColorStop(1, `hsla(${p.hue}, 100%, 60%, 0)`);
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size * 3, 0, Math.PI * 2);
+                ctx.fillStyle = gradient;
+                ctx.fill();
+            });
+        }
+
+        function draw() {
+            ctx.fillStyle = 'rgba(5, 5, 5, 0.3)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 绘制网格线（微弱）
+            ctx.strokeStyle = 'rgba(0, 255, 255, 0.03)';
+            for (let i = 0; i <= GRID_COUNT; i++) {
+                ctx.beginPath();
+                ctx.moveTo(i * GRID_SIZE, 0);
+                ctx.lineTo(i * GRID_SIZE, canvas.height);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(0, i * GRID_SIZE);
+                ctx.lineTo(canvas.width, i * GRID_SIZE);
+                ctx.stroke();
+            }
+
+            // 绘制流光粒子
+            drawParticles();
+
+            // 绘制食物 - 脉冲发光
+            const pulse = Math.sin(Date.now() / 150) * 0.5 + 0.5;
+            const foodX = food.x * GRID_SIZE + GRID_SIZE / 2;
+            const foodY = food.y * GRID_SIZE + GRID_SIZE / 2;
+            const foodSize = GRID_SIZE / 2 - 1 + pulse * 4;
+
+            // 食物外发光
+            const foodGradient = ctx.createRadialGradient(foodX, foodY, 0, foodX, foodY, foodSize * 3);
+            foodGradient.addColorStop(0, `rgba(255, 100, 100, ${0.8 + pulse * 0.2})`);
+            foodGradient.addColorStop(0.5, `rgba(255, 50, 50, ${0.4 + pulse * 0.2})`);
+            foodGradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
+            ctx.beginPath();
+            ctx.arc(foodX, foodY, foodSize * 3, 0, Math.PI * 2);
+            ctx.fillStyle = foodGradient;
+            ctx.fill();
+
+            // 食物本体
+            ctx.beginPath();
+            ctx.arc(foodX, foodY, foodSize, 0, Math.PI * 2);
+            ctx.fillStyle = `hsl(${0 + pulse * 30}, 100%, 60%)`;
+            ctx.shadowColor = '#ff4444';
+            ctx.shadowBlur = 20;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // 绘制蛇
+            snake.forEach((segment, index) => {
+                const isHead = index === 0;
+                const segmentHue = (hue + index * 5) % 360;
+                const size = GRID_SIZE - 2;
+                const x = segment.x * GRID_SIZE + 1;
+                const y = segment.y * GRID_SIZE + 1;
+
+                // 流光渐变
+                const gradient = ctx.createRadialGradient(
+                    x + size/2, y + size/2, 0,
+                    x + size/2, y + size/2, size
+                );
+                gradient.addColorStop(0, `hsla(${segmentHue}, 100%, 70%, 1)`);
+                gradient.addColorStop(0.7, `hsla(${segmentHue}, 100%, 55%, 0.9)`);
+                gradient.addColorStop(1, `hsla(${segmentHue}, 100%, 40%, 0.7)`);
+
+                // 外发光
+                ctx.shadowColor = `hsl(${segmentHue}, 100%, 60%)`;
+                ctx.shadowBlur = isHead ? 20 : 10;
+
+                ctx.beginPath();
+                ctx.roundRect(x, y, size, size, 6);
+                ctx.fillStyle = gradient;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+
+                // 高光
+                ctx.beginPath();
+                ctx.roundRect(x + 2, y + 2, size/3, size/3, 3);
+                ctx.fillStyle = `rgba(255, 255, 255, ${0.3 + (1 - index/snake.length) * 0.2})`;
+                ctx.fill();
+
+                // 蛇头眼睛
+                if (isHead) {
+                    ctx.fillStyle = '#fff';
+                    ctx.shadowColor = '#fff';
+                    ctx.shadowBlur = 5;
+                    
+                    const eyeSize = 3;
+                    let eye1X, eye1Y, eye2X, eye2Y;
+                    
+                    if (direction.x === 1) {
+                        eye1X = x + size - 6; eye1Y = y + 5;
+                        eye2X = x + size - 6; eye2Y = y + size - 6;
+                    } else if (direction.x === -1) {
+                        eye1X = x + 6; eye1Y = y + 5;
+                        eye2X = x + 6; eye2Y = y + size - 6;
+                    } else if (direction.y === -1) {
+                        eye1X = x + 5; eye1Y = y + 6;
+                        eye2X = x + size - 6; eye2Y = y + 6;
+                    } else {
+                        eye1X = x + 5; eye1Y = y + size - 6;
+                        eye2X = x + size - 6; eye2Y = y + size - 6;
+                    }
+                    
+                    ctx.beginPath();
+                    ctx.arc(eye1X, eye1Y, eyeSize, 0, Math.PI * 2);
+                    ctx.arc(eye2X, eye2Y, eyeSize, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                }
+            });
+
+            // 颜色循环
+            hue = (hue + 3) % 360;
+        }
+
+        function update() {
+            direction = { ...nextDirection };
+
+            const head = { 
+                x: snake[0].x + direction.x, 
+                y: snake[0].y + direction.y 
+            };
+
+            // 记录之前位置用于流光线
+            const prevHead = { ...snake[0] };
+
+            // 撞墙检测
+            if (head.x < 0 || head.x >= GRID_COUNT || 
+                head.y < 0 || head.y >= GRID_COUNT) {
+                createExplosion(snake[0].x * GRID_SIZE + GRID_SIZE/2, snake[0].y * GRID_SIZE + GRID_SIZE/2);
+                endGame();
+                return;
+            }
+
+            // 撞自己检测
+            if (snake.some(segment => segment.x === head.x && segment.y === head.y)) {
+                createExplosion(head.x * GRID_SIZE + GRID_SIZE/2, head.y * GRID_SIZE + GRID_SIZE/2);
+                endGame();
+                return;
+            }
+
+            // 创建流光线
+            if (snake.length > 0) {
+                createStreamLine(head.x, head.y, prevHead.x, prevHead.y);
+            }
+
+            snake.unshift(head);
+
+            // 吃食物
+            if (head.x === food.x && head.y === food.y) {
+                score += 10;
+                scoreEl.textContent = score;
+                
+                // 吃食物爆炸特效
+                createExplosion(food.x * GRID_SIZE + GRID_SIZE/2, food.y * GRID_SIZE + GRID_SIZE/2);
+                
+                if (score > 0 && score % 50 === 0) {
+                    level++;
+                    levelEl.textContent = level;
+                    speedUp();
+                }
+                
+                spawnFood();
+            } else {
+                snake.pop();
+            }
+
+            updateParticles();
+            draw();
+        }
+
+        // 创建爆炸特效
+        function createExplosion(x, y) {
+            for (let i = 0; i < 30; i++) {
+                const angle = (Math.PI * 2 / 30) * i;
+                const speed = 2 + Math.random() * 4;
+                
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    life: 1,
+                    decay: 0.02,
+                    size: 4 + Math.random() * 4,
+                    hue: (hue + Math.random() * 60) % 360
+                });
+            }
+            
+            // 添加爆炸流光线
+            for (let i = 0; i < 12; i++) {
+                const angle = (Math.PI * 2 / 12) * i;
+                const dist = 20 + Math.random() * 20;
+                streamLines.push({
+                    x: x,
+                    y: y,
+                    prevX: x + Math.cos(angle) * dist,
+                    prevY: y + Math.sin(angle) * dist,
+                    life: 1,
+                    decay: 0.04,
+                    width: 4,
+                    hue: hue
+                });
+            }
+        }
+
+        function speedUp() {
+            if (gameLoop) {
+                clearInterval(gameLoop);
+                const newSpeed = Math.max(50, 150 - level * 15);
+                gameLoop = setInterval(update, newSpeed);
+            }
+        }
+
+        function startGame() {
+            if (isRunning) return;
+            initGame();
+            isRunning = true;
+            startBtn.style.display = 'none';
+            gameOverEl.style.display = 'none';
+            const speed = Math.max(50, 150 - level * 15);
+            gameLoop = setInterval(update, speed);
+        }
+
+        function endGame() {
+            isRunning = false;
+            clearInterval(gameLoop);
+            gameLoop = null;
+            finalScoreEl.textContent = score;
+            gameOverEl.style.display = 'block';
+        }
+
+        function resetGame() {
+            gameOverEl.style.display = 'none';
+            startBtn.style.display = 'block';
+            initGame();
+        }
+
+        // 键盘控制
+        document.addEventListener('keydown', (e) => {
+            if (!isRunning) return;
+
+            switch(e.key) {
+                case 'ArrowUp':
+                case 'w':
+                case 'W':
+                    if (direction.y !== 1) nextDirection = { x: 0, y: -1 };
+                    e.preventDefault();
+                    break;
+                case 'ArrowDown':
+                case 's':
+                case 'S':
+                    if (direction.y !== -1) nextDirection = { x: 0, y: 1 };
+                    e.preventDefault();
+                    break;
+                case 'ArrowLeft':
+                case 'a':
+                case 'A':
+                    if (direction.x !== 1) nextDirection = { x: -1, y: 0 };
+                    e.preventDefault();
+                    break;
+                case 'ArrowRight':
+                case 'd':
+                case 'D':
+                    if (direction.x !== -1) nextDirection = { x: 1, y: 0 };
+                    e.preventDefault();
+                    break;
+                case ' ':
+                    if (isRunning) {
+                        clearInterval(gameLoop);
+                        isRunning = false;
+                    } else {
+                        const speed = Math.max(50, 150 - level * 15);
+                        gameLoop = setInterval(update, speed);
+                        isRunning = true;
+                    }
+                    e.preventDefault();
+                    break;
+            }
+        });
+
+        startBtn.addEventListener('click', startGame);
+        initGame();
+    </script>
+</body>
+</html>
