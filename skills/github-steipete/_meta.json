@@ -1,0 +1,5 @@
+{
+  "name": "github",
+  "version": "1.0.0",
+  "description": "Interact with GitHub using the gh CLI"
+}
